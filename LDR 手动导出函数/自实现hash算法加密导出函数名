@@ -1,0 +1,107 @@
+.386
+.model flat,stdcall
+option casemap:none
+
+; 包含printf函数所在的头文件和库文件
+include msvcrt.inc ; 微软vc运行时库的头文件,
+		   ; 一般包含的时c语言的各个头文件
+includelib msvcrt.lib ; 包含头文件所对应的库文件
+
+assume fs:nothing
+
+.const ; 全局常量
+g_formtStr db "%-40s      ",0
+g_formtInt db "%d ",0ah,0
+g_formtHex db "%08X ",0ah,0
+
+.code
+
+
+GetA proc
+	LOCAL @addOfFunc;
+	LOCAL @AddOfName;
+	LOCAL @AddOfNaOrd;
+	LOCAL @Sum;
+
+	mov eax,fs:[48];fs表示当前线程的teb结构，eax为PEB的地址
+	mov eax,[eax+12];获取这个进程的导入dll
+	mov eax,[eax+28];获取PEB_LDR_DATA结构v 
+	mov eax,[eax];获取第一个结构的值
+	mov eax,[eax];获取第一个结构的值
+	
+	
+	
+	mov ebx,[eax+8h];ebx=dll基质
+	mov eax,[ebx+3ch]
+	mov eax,[eax+ebx+78h]
+	add eax,ebx
+	
+	mov ecx,[eax+14h];//Sumfunc
+	mov edx,[eax+1ch];//AddressOfFunctions
+	mov esi,[eax+20h];//AddressOfNames
+	mov edi,[eax+24h];//AddressOfNameOrdinals
+	add edx,ebx;
+	add esi,ebx;
+	add edi,ebx;//edi 已经是第一个符号的地址（2字节）
+	mov @addOfFunc,edx;
+	mov @AddOfName,esi;
+	mov @AddOfNaOrd,edi;
+	;mov ecx,10;
+	mov @Sum,ecx;
+	
+	xor ecx,ecx;清空计数器
+	
+LL1:
+	
+	
+	push ecx;因为printf会影响ecx,eax,edx的值，所以只要把这个push到栈中临时保存
+	
+	mov eax,[esi+ecx*4];esi指向的是AddressOfNames的RVA表地址，每一个RVA都是一个DWORD 所以要*4
+	add eax,ebx;ebx是这个dll的基值
+	
+ 	push eax ; offset 伪指令能够取到一个标识符的地址
+	push offset g_formtStr;输出格式
+	call crt__cprintf ; 调用函数
+	add esp,8;//打印Func名字 
+	
+	pop ecx;把偏移pop出来使用
+	
+	mov eax,@AddOfNaOrd;取符号表的基值
+	add eax,ecx;
+	add eax,ecx;这里的两个add是因为每个符号表只占一个WORD，（等于eax+ecx*2)
+	mov eax,[eax];拿出这个偏移的符号值
+	and eax,0FFFFh;应为eax是DWORD 而我们只要内存中的低四位，所以这样取
+	push ecx;还是因为prinf会破坏ecx的值
+	
+ 	;push eax ; offset 伪指令能够取到一个标识符的地址
+	;push offset g_formtInt
+	;call crt__cprintf ; 调用函数
+	;add esp,8;//打印名字 
+	
+	mov edx,@addOfFunc;
+	add edx,eax;
+	add edx,eax;
+	add edx,eax;
+	add edx,eax;这里也和上面一样，相当于edx+eax*4,因为函数地址=BaseAddressOfFunctions+对应符号表值
+	mov edx,[edx];取AddressOfFunctions指向的地址
+	add edx,ebx;这个地址是RVA要加上dll的BASE
+	
+	;call edx;
+
+	push edx ; offset 伪指令能够取到一个标识符的地址
+	push offset g_formtHex;a
+	call crt__cprintf ; 调用函数
+	add esp,8;//打印名字 
+
+	pop ecx
+	add ecx ,1;
+	cmp ecx,@Sum
+	jne LL1
+	ret
+GetA endp
+
+main:
+	call GetA;
+	ret 
+end main
+end 
